@@ -1,9 +1,10 @@
 // lib/widgets/task_checkbox.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:todoo_app/models/task.dart';
 import 'package:todoo_app/providers/task_provider.dart';
 
-class TaskCheckboxAndText extends StatelessWidget {
+class TaskCheckboxAndText extends ConsumerStatefulWidget {
   final Task task;
   final Tasks tasksNotifier;
 
@@ -14,29 +15,44 @@ class TaskCheckboxAndText extends StatelessWidget {
   });
 
   @override
+  ConsumerState<TaskCheckboxAndText> createState() =>
+      _TaskCheckboxAndTextState();
+}
+
+class _TaskCheckboxAndTextState extends ConsumerState<TaskCheckboxAndText> {
+  bool _isProcessing = false;
+  @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Row(
         children: [
           // Task checkbox
-          Checkbox(
-            value: task.isCompleted,
-            onChanged: (bool? newValue) {
-              if (newValue != null) {
-                final updatedTask = task.copyWith(
-                  isCompleted: newValue,
-                  updatedAt: DateTime.now(),
-                );
-                tasksNotifier.updateTask(updatedTask);
-              }
-            },
-            activeColor: Theme.of(
-              context,
-            ).colorScheme.secondary, // Use theme accent color
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
+          _isProcessing
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Checkbox(
+                  value: widget.task.isCompleted,
+                  onChanged: (bool? value) async {
+                    if (value == null) return;
+
+                    // 1. Lock the UI
+                    setState(() => _isProcessing = true);
+
+                    // 2. Perform the update
+                    final updatedTask = widget.task.copyWith(
+                      isCompleted: value,
+                    );
+                    await widget.tasksNotifier.updateTask(updatedTask);
+
+                    // 3. Unlock (only if widget is still on screen)
+                    if (mounted) {
+                      setState(() => _isProcessing = false);
+                    }
+                  },
+                ),
 
           // Task title text
           const SizedBox(width: 8.0),
@@ -45,16 +61,16 @@ class TaskCheckboxAndText extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  task.title,
+                  widget.task.title,
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     fontStyle: FontStyle.italic,
-                    decoration: task.isCompleted
+                    decoration: widget.task.isCompleted
                         ? TextDecoration.lineThrough
                         : null,
                     // Use theme colors for title
-                    color: task.isCompleted
+                    color: widget.task.isCompleted
                         ? Theme.of(context)
                               .textTheme
                               .bodySmall
@@ -67,17 +83,17 @@ class TaskCheckboxAndText extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 // Description text (optional)
-                if (task.description.isNotEmpty) ...[
+                if (widget.task.description.isNotEmpty) ...[
                   const SizedBox(height: 4.0),
                   Text(
-                    task.description,
+                    widget.task.description,
                     style: TextStyle(
                       fontSize: 13,
-                      decoration: task.isCompleted
+                      decoration: widget.task.isCompleted
                           ? TextDecoration.lineThrough
                           : null,
                       // Use theme colors for description
-                      color: task.isCompleted
+                      color: widget.task.isCompleted
                           ? Theme.of(context).textTheme.bodySmall?.color
                           : Theme.of(context)
                                 .colorScheme
@@ -89,15 +105,16 @@ class TaskCheckboxAndText extends StatelessWidget {
                 ],
                 const SizedBox(height: 4),
                 Text(
-                  'Due: ${task.dueDate.toLocal().toString().split(' ')[0]}',
+                  //show with time
+                  'Due: ${widget.task.dueDate.toLocal().toString().split(' ')[0]}',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    decoration: task.isCompleted
+                    decoration: widget.task.isCompleted
                         ? TextDecoration.lineThrough
                         : null,
                     // Use theme error color for due date, or a different color for completed
-                    color: task.isCompleted
+                    color: widget.task.isCompleted
                         ? Theme.of(context)
                               .textTheme
                               .bodySmall
@@ -108,7 +125,7 @@ class TaskCheckboxAndText extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Created at ${task.createdAt.toLocal().toString().split(' ')[0]}',
+                  'Created at ${widget.task.createdAt.toLocal().toString().split(' ')[0]}',
                   style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(

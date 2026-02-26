@@ -15,12 +15,16 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   Future<void> initNotification() async {
-    await _notificationsPlugin
+    final androidImplementation = _notificationsPlugin
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.requestNotificationsPermission();
+        >();
 
+    // Request normal notification permission
+    await androidImplementation?.requestNotificationsPermission();
+
+    // 🔥 ADD THIS: Request Exact Alarm permission for Android 13+
+    await androidImplementation?.requestExactAlarmsPermission();
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
     const InitializationSettings initializationSettings =
@@ -42,23 +46,29 @@ class NotificationService {
     String title,
     DateTime scheduledTime,
   ) async {
+    debugPrint('Scheduling for: $scheduledTime');
+
     await _notificationsPlugin.zonedSchedule(
       taskId.hashCode,
       'Task Reminder!!',
       title,
       tz.TZDateTime.from(scheduledTime, tz.local),
       const NotificationDetails(
+        // <--- Start of Details
         android: AndroidNotificationDetails(
           'task_channel',
-          'task Notification',
+          'Task Notifications',
           importance: Importance.max,
           priority: Priority.high,
-          sound: RawResourceAndroidNotificationSound('notification_sound'),
+          enableVibration: true,
           playSound: true,
         ),
         iOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents: null,
     );
+
+    debugPrint('✅ Notification successfully scheduled!');
   }
 }

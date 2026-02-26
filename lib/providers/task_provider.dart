@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:todoo_app/models/task.dart';
 import 'package:todoo_app/services/hive_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:todoo_app/services/notification.dart';
 
 part 'task_provider.g.dart';
 
@@ -39,9 +40,24 @@ class Tasks extends _$Tasks {
     state = const AsyncValue.loading();
     try {
       final hiveService = await ref.read(initializedHiveServiceProvider.future);
+
+      // 1. Wait for Database Save
       await hiveService.addTask(task);
+      debugPrint('✅ Task saved to Hive: ${task.id}');
+
+      // 2. Schedule Notification ONLY after DB success
+      final notificationService = ref.read(notificationServiceProvider);
+      await notificationService.scheduleTaskNotification(
+        task.id,
+        task.title,
+        task.dueDate,
+      );
+      debugPrint('🔔 Notification scheduled for: ${task.dueDate}');
+
+      // 3. Update State
       state = AsyncValue.data(hiveService.getTasks());
     } catch (e, st) {
+      debugPrint("Error in addTask: $e");
       state = AsyncValue.error(e, st);
     }
   }
@@ -50,7 +66,24 @@ class Tasks extends _$Tasks {
     state = const AsyncValue.loading();
     try {
       final hiveService = await ref.read(initializedHiveServiceProvider.future);
+      final notificationService = ref.read(
+        notificationServiceProvider,
+      ); // Read service
+
       await hiveService.updateTask(task);
+
+      // LOGIC: If task is now completed or deleted, cancel the alert
+      if (task.isCompleted || task.isDeleted) {
+        await notificationService.cancelNotification(task.id);
+      } else {
+        // If it's still active, re-schedule it (in case the time changed)
+        await notificationService.scheduleTaskNotification(
+          task.id,
+          task.title,
+          task.dueDate,
+        );
+      }
+
       state = AsyncValue.data(hiveService.getTasks());
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -61,6 +94,9 @@ class Tasks extends _$Tasks {
     state = const AsyncValue.loading();
     try {
       final hiveService = await ref.read(initializedHiveServiceProvider.future);
+      // Kill the notification immediately upon deletion
+      await ref.read(notificationServiceProvider).cancelNotification(taskId);
+
       await hiveService.softDeleteTask(taskId);
       state = AsyncValue.data(hiveService.getTasks());
       ref.read(deletedTasksProvider.notifier).refreshDeletedTasks();
